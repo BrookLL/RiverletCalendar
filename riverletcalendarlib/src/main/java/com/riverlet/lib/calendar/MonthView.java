@@ -23,6 +23,7 @@ public class MonthView extends RecyclerView {
     private static final String TAG = "MonthView";
     private Day[] dates;
     private int selectIndex = -1;
+    private static int selectedDate;
     private Calendar realCalendar = Calendar.getInstance();
     private Month month;
     private Day today;
@@ -32,7 +33,7 @@ public class MonthView extends RecyclerView {
     private int currentViewMonth;
     private int currentViewYear;
 
-    private OnDayClickListenter onDayClickListenter;
+    private OnDayClickListener onDayClickListener;
 
     public MonthView(@NonNull Context context) {
         this(context, null);
@@ -76,27 +77,35 @@ public class MonthView extends RecyclerView {
         }
     }
 
-    public void setOnDayClickListenter(OnDayClickListenter onDayClickListenter) {
-        this.onDayClickListenter = onDayClickListenter;
+    public void setOnDayClickListener(OnDayClickListener onDayClickListener) {
+        this.onDayClickListener = onDayClickListener;
     }
 
     public void setSelectedDate(int selectedDate) {
         for (int i = 0; i < dates.length; i++) {
             if (dates[i].getMonth() == currentViewMonth && dates[i].getDate() == selectedDate) {
-                DayView dayView = (DayView) getChildAt(selectIndex);
-                dayView.setSelected(false);
+                if (selectIndex >= 0) {
+                    DayView dayView = (DayView) getChildAt(selectIndex);
+                    dayView.setSelected(false);
+                }
                 getChildAt(i).setSelected(true);
                 selectIndex = i;
             }
         }
+        this.selectedDate = selectedDate;
+    }
+
+    public void refreshSelectIndex() {
+        setSelectedDate(selectedDate);
     }
 
     private void initCalendar() {
+        //获取年月对应的Calendar实例
         Calendar calendar = Calendar.getInstance();
         calendar.set(Calendar.YEAR, month.getYear());
         calendar.set(Calendar.MONTH, month.getMonth() - 1);
         calendar.set(Calendar.DAY_OF_MONTH, 1);
-
+        //设置每周第一天是周日
         calendar.setFirstDayOfWeek(Calendar.SUNDAY);
         calendar.set(Calendar.DATE, 1);
         int fristDateOfWeek = calendar.get(Calendar.DAY_OF_WEEK);
@@ -159,6 +168,7 @@ public class MonthView extends RecyclerView {
             boolean isToday = today.isToday(currentViewYear, currentViewMonth, day.getDate());
             if (isToday && selectIndex == -1) {
                 selectIndex = position;
+                selectedDate = day.getDate();
             }
             calendarViewHolder.dayView.setToday(isToday);
             calendarViewHolder.dayView.setSelected(selectIndex == position);
@@ -172,10 +182,11 @@ public class MonthView extends RecyclerView {
                         }
                         v.setSelected(true);
                         selectIndex = position;
+                        selectedDate = day.getDate();
                     }
 
-                    if (onDayClickListenter != null) {
-                        onDayClickListenter.onDayClick(currentViewMonth, day);
+                    if (onDayClickListener != null) {
+                        onDayClickListener.onDayClick(currentViewMonth, day);
                     }
                 }
             });
@@ -227,7 +238,7 @@ public class MonthView extends RecyclerView {
         }
     }
 
-    public interface OnDayClickListenter {
+    public interface OnDayClickListener {
         void onDayClick(int currentViewMonth, Day day);
     }
 }

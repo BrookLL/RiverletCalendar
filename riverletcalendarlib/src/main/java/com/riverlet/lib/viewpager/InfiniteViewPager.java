@@ -23,7 +23,8 @@ public class InfiniteViewPager extends ViewPager {
     private ViewHolderCreator viewHolderCreator;
     private Map<Integer, Object> dataMap = new HashMap<>();
     private List<Object> dataList = new ArrayList<>();
-    private OnNeedAddDataListener onNeedAddDataListener;
+    private OnNeedAddDataCallback onNeedAddDataCallback;
+    private LoopPagerAdapter adatper;
 
     public InfiniteViewPager(@NonNull Context context) {
         this(context, null);
@@ -34,8 +35,8 @@ public class InfiniteViewPager extends ViewPager {
         setOffscreenPageLimit(MAX_VIEW_LIMIT);
     }
 
-    public void setOnNeedAddDataListener(OnNeedAddDataListener onNeedAddDataListener) {
-        this.onNeedAddDataListener = onNeedAddDataListener;
+    public void setOnNeedAddDataCallback(OnNeedAddDataCallback onNeedAddDataCallback) {
+        this.onNeedAddDataCallback = onNeedAddDataCallback;
     }
 
     private class LoopPagerAdapter extends PagerAdapter {
@@ -79,9 +80,25 @@ public class InfiniteViewPager extends ViewPager {
         }
     }
 
-    public interface OnNeedAddDataListener<T> {
+    /**
+     * 需要新增数据的回调
+     * @param <T>
+     */
+    public interface OnNeedAddDataCallback<T> {
+        /**
+         * 新增数据在前（左）
+         * @param position 触发回调的位置
+         * @param t 当前最靠前（左）的数据
+         * @return 新增数据
+         */
         T addFirst(int position, T t);
 
+        /**
+         * 新增数据在后（右）
+         * @param position 触发回调的位置
+         * @param t 当前最靠前后（右）的数据
+         * @return 新增数据
+         */
         T addLast(int position, T t);
     }
 
@@ -91,14 +108,14 @@ public class InfiniteViewPager extends ViewPager {
         if (dataMap.containsKey(key)) {
             return dataMap.get(key);
         } else {
-            if (onNeedAddDataListener != null) {
+            if (onNeedAddDataCallback != null) {
                 if (key > 0) {
-                    Object object = onNeedAddDataListener.addLast(position, dataMap.get(key - 1));
+                    Object object = onNeedAddDataCallback.addLast(position, dataMap.get(key - 1));
                     dataList.add(object);
                     dataMap.put(key, object);
                     return object;
                 } else {
-                    Object object = onNeedAddDataListener.addFirst(position, dataMap.get(key + 1));
+                    Object object = onNeedAddDataCallback.addFirst(position, dataMap.get(key + 1));
                     Log.d(TAG, "object:" + object);
                     dataList.add(0, object);
                     dataMap.put(key, object);
@@ -159,8 +176,25 @@ public class InfiniteViewPager extends ViewPager {
         for (int i = 0; i < dataList.size(); i++) {
             dataMap.put(i - dataList.size() / 2, dataList.get(i));
         }
-        setAdapter(new LoopPagerAdapter());
+        adatper = new LoopPagerAdapter();
+        setAdapter(adatper);
         setCurrentItem(MID_PAGES_INDEX, false);
     }
 
+    /**
+     * 获取当前显示Item的ViewHolder
+     * @return
+     */
+    public ViewHolder getCurrentItemViewHolder(){
+        return adatper.usedViewHolders.get(getCurrentItem());
+    }
+
+    /**
+     * 根据Item位置获取它的ViewHolder
+     * @param position
+     * @return
+     */
+    public ViewHolder getViewHolderOfPosition(int position) {
+        return adatper.usedViewHolders.get(position);
+    }
 }

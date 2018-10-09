@@ -22,6 +22,6 @@ public class Month {
 
     @Override
     public String toString() {
-        return year+"年"+month+"月";
+        return year + "年" + (month < 10 ? "0" : "") + month + "月";
     }
 }
