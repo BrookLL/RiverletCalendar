@@ -22,9 +22,8 @@ public class InfiniteViewPager extends ViewPager {
     private static final int MID_PAGES_INDEX = Integer.MAX_VALUE / 2;
     private ViewHolderCreator viewHolderCreator;
     private Map<Integer, Object> dataMap = new HashMap<>();
-    private List<Object> dataList = new ArrayList<>();
     private OnNeedAddDataCallback onNeedAddDataCallback;
-    private LoopPagerAdapter adatper;
+    private OnCurrentPageChangeListener onCurrentPageChangeListener;
 
     public InfiniteViewPager(@NonNull Context context) {
         this(context, null);
@@ -33,22 +32,48 @@ public class InfiniteViewPager extends ViewPager {
     public InfiniteViewPager(@NonNull Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
         setOffscreenPageLimit(MAX_VIEW_LIMIT);
+        addOnPageChangeListener(onPageChangeListener);
     }
 
+    private OnPageChangeListener onPageChangeListener = new OnPageChangeListener() {
+        @Override
+        public void onPageScrolled(int i, float v, int i1) {
+
+        }
+
+        @Override
+        public void onPageSelected(int i) {
+            if (onCurrentPageChangeListener != null) {
+                Object currentData = getCurrentItemViewHolder().data;
+                onCurrentPageChangeListener.onCurrentPageChange(currentData);
+            }
+        }
+
+        @Override
+        public void onPageScrollStateChanged(int i) {
+
+        }
+    };
+
+    /**
+     * 设置新增数据的回调
+     * @param onNeedAddDataCallback
+     */
     public void setOnNeedAddDataCallback(OnNeedAddDataCallback onNeedAddDataCallback) {
         this.onNeedAddDataCallback = onNeedAddDataCallback;
     }
 
     private class LoopPagerAdapter extends PagerAdapter {
 
-        LinkedList<ViewHolder> viewHolders = new LinkedList<ViewHolder>() {
-            {
-                while (this.size() < 7) {
-                    add(viewHolderCreator.create());
-                }
-            }
-        };
-        Map<Integer, ViewHolder> usedViewHolders = new HashMap<>();
+        @Override
+        public void finishUpdate(@NonNull ViewGroup container) {
+            super.finishUpdate(container);
+        }
+
+        @Override
+        public void setPrimaryItem(@NonNull ViewGroup container, int position, @NonNull Object object) {
+            super.setPrimaryItem(container, position, object);
+        }
 
         @Override
         public int getCount() {
@@ -64,67 +89,54 @@ public class InfiniteViewPager extends ViewPager {
         @NonNull
         @Override
         public Object instantiateItem(@NonNull ViewGroup container, int position) {
-            ViewHolder holder = viewHolders.removeFirst();
+            Log.d(TAG, "instantiateItem.position:" + position);
+            ViewHolder holder = viewHolderCreator.getFreeViewHolder();
             Object object = getDataOfItem(position);
             holder.setData(object);
             container.addView(holder.view);
-            usedViewHolders.put(position, holder);
+            viewHolderCreator.usedViewHolders.put(position, holder);
             return holder.view;
         }
 
         @Override
         public void destroyItem(@NonNull ViewGroup container, int position, @NonNull Object object) {
-            ViewHolder holder = usedViewHolders.remove(position);
+            ViewHolder holder = viewHolderCreator.usedViewHolders.remove(position);
             container.removeView(holder.view);
-            viewHolders.addLast(holder);
+            viewHolderCreator.freeViewHolders.addLast(holder);
+            Log.d(TAG, "destroyItem.position:" + position);
         }
-    }
 
-    /**
-     * 需要新增数据的回调
-     * @param <T>
-     */
-    public interface OnNeedAddDataCallback<T> {
-        /**
-         * 新增数据在前（左）
-         * @param position 触发回调的位置
-         * @param t 当前最靠前（左）的数据
-         * @return 新增数据
-         */
-        T addFirst(int position, T t);
-
-        /**
-         * 新增数据在后（右）
-         * @param position 触发回调的位置
-         * @param t 当前最靠前后（右）的数据
-         * @return 新增数据
-         */
-        T addLast(int position, T t);
-    }
-
-    private Object getDataOfItem(int position) {
-        int key = position - MID_PAGES_INDEX;
-        Log.d(TAG, "position:" + position + "...key:" + key);
-        if (dataMap.containsKey(key)) {
-            return dataMap.get(key);
-        } else {
-            if (onNeedAddDataCallback != null) {
-                if (key > 0) {
-                    Object object = onNeedAddDataCallback.addLast(position, dataMap.get(key - 1));
-                    dataList.add(object);
-                    dataMap.put(key, object);
-                    return object;
-                } else {
-                    Object object = onNeedAddDataCallback.addFirst(position, dataMap.get(key + 1));
-                    Log.d(TAG, "object:" + object);
-                    dataList.add(0, object);
-                    dataMap.put(key, object);
-                    return object;
+        private Object getDataOfItem(int position) {
+            Log.d(TAG, "position:" + position);
+            if (dataMap.containsKey(position)) {
+                return dataMap.get(position);
+            } else {
+                if (onNeedAddDataCallback != null) {
+                    Log.d(TAG, ".getDataOfItem.dataMap:" + dataMap.toString());
+                    if (position > MID_PAGES_INDEX) {
+                        Object currentLastData = dataMap.get(position - 1);
+                        if (currentLastData != null) {
+                            Object object = onNeedAddDataCallback.addLast(position, currentLastData);
+                            dataMap.put(position, object);
+                            return object;
+                        }
+                    }
+                    if (position < MID_PAGES_INDEX) {
+                        Object currentFirstData = dataMap.get(position + 1);
+                        if (currentFirstData != null) {
+                            Object object = onNeedAddDataCallback.addFirst(position, currentFirstData);
+                            dataMap.put(position, object);
+                            return object;
+                        }
+                    }
+                    if (position == MID_PAGES_INDEX) {
+                        throw new NullPointerException("没有设置第一个数据的值");
+                    }
                 }
-            }
 
+            }
+            return null;
         }
-        return null;
     }
 
     /**
@@ -161,8 +173,60 @@ public class InfiniteViewPager extends ViewPager {
      * 创建ViewHolder的工具子类
      */
     public static abstract class ViewHolderCreator {
+        LinkedList<ViewHolder> freeViewHolders = new LinkedList<ViewHolder>();
+        Map<Integer, ViewHolder> usedViewHolders = new HashMap<>();
+
+        /**
+         * 获取自由ViewHolder
+         *
+         * @return
+         */
+        private ViewHolder getFreeViewHolder() {
+            ViewHolder viewHolder = null;
+            if (!freeViewHolders.isEmpty()) {
+                viewHolder = freeViewHolders.removeFirst();
+            }
+            if (viewHolder == null) {
+                viewHolder = create();
+            }
+            return viewHolder;
+        }
+
         public abstract ViewHolder create();
     }
+
+    /**
+     * 需要新增数据的回调
+     *
+     * @param <T>
+     */
+    public interface OnNeedAddDataCallback<T> {
+        /**
+         * 新增数据在前（左）
+         *
+         * @param position 触发回调的位置
+         * @param t        当前最靠前（左）的数据
+         * @return 新增数据
+         */
+        T addFirst(int position, T t);
+
+        /**
+         * 新增数据在后（右）
+         *
+         * @param position 触发回调的位置
+         * @param t        当前最靠前后（右）的数据
+         * @return 新增数据
+         */
+        T addLast(int position, T t);
+    }
+
+    /**
+     * 翻页后当前数据在列表中的位置回调
+     */
+    public interface OnCurrentPageChangeListener {
+        void onCurrentPageChange(Object onject);
+    }
+
 
     /**
      * 设置基础数据和ViewHolderCreator
@@ -171,30 +235,117 @@ public class InfiniteViewPager extends ViewPager {
      * @param viewHolderCreator
      */
     public void setData(List dataList, @NonNull ViewHolderCreator viewHolderCreator) {
-        this.dataList.addAll(dataList);
+        dataMap.clear();
         this.viewHolderCreator = viewHolderCreator;
         for (int i = 0; i < dataList.size(); i++) {
-            dataMap.put(i - dataList.size() / 2, dataList.get(i));
+            dataMap.put(MID_PAGES_INDEX + (i - dataList.size() / 2), dataList.get(i));
         }
-        adatper = new LoopPagerAdapter();
-        setAdapter(adatper);
-        setCurrentItem(MID_PAGES_INDEX, false);
+        setAdapter(new LoopPagerAdapter());
+        super.setCurrentItem(MID_PAGES_INDEX, false);
     }
 
     /**
      * 获取当前显示Item的ViewHolder
+     *
      * @return
      */
-    public ViewHolder getCurrentItemViewHolder(){
-        return adatper.usedViewHolders.get(getCurrentItem());
+    public ViewHolder getCurrentItemViewHolder() {
+        return viewHolderCreator.usedViewHolders.get(getCurrentItem());
     }
 
     /**
      * 根据Item位置获取它的ViewHolder
+     *
      * @param position
      * @return
      */
     public ViewHolder getViewHolderOfPosition(int position) {
-        return adatper.usedViewHolders.get(position);
+        return viewHolderCreator.usedViewHolders.get(position);
+    }
+
+    //原来跳转界面要阻断
+    @Override
+    public void setCurrentItem(int item) {
+//        super.setCurrentItem(item);
+    }
+
+    //原来跳转界面要阻断
+    @Override
+    public void setCurrentItem(int item, boolean smoothScroll) {
+//        super.setCurrentItem(item, smoothScroll);
+    }
+
+    /**
+     * 跳转到指定Data的位置
+     *
+     * @param data
+     */
+    public void setCurrentItemOfData(Object data) {
+        setCurrentItemOfData(data, true);
+    }
+
+    /**
+     * 跳转到指定Data的位置
+     *
+     * @param data
+     */
+    public void setCurrentItemOfData(Object data, boolean smoothScroll) {
+        for (Integer key : dataMap.keySet()) {
+            if (data.equals(dataMap.get(key))) {
+                scrollToItem(key, smoothScroll);
+                break;
+            }
+        }
+    }
+
+    private void scrollToItem(final Integer position, final boolean smoothScroll) {
+        int currentPosition = getCurrentItem();
+        if (position > currentPosition) {
+            while (++currentPosition <= position) {
+                super.setCurrentItem(currentPosition, smoothScroll);
+            }
+
+        } else {
+            while (--currentPosition >= position) {
+                super.setCurrentItem(currentPosition, smoothScroll);
+            }
+        }
+    }
+
+    /**
+     * 翻到下一页
+     */
+    public void nextPage() {
+        if (getCurrentItem() + 1 > Integer.MAX_VALUE) {
+            Log.e(TAG, "没有下一页了");
+            return;
+        }
+        super.setCurrentItem(getCurrentItem() + 1);
+    }
+
+    /**
+     * 翻到上一页
+     */
+    public void lastPage() {
+        if (getCurrentItem() <= 0) {
+            Log.e(TAG, "没有上一页了");
+            return;
+        }
+        super.setCurrentItem(getCurrentItem() - 1);
+    }
+    /**
+     * 设置当前页变化的监听
+     * @param onCurrentPageChangeListener
+     */
+    public void setOnCurrentPageChangeListener(OnCurrentPageChangeListener onCurrentPageChangeListener) {
+        this.onCurrentPageChangeListener = onCurrentPageChangeListener;
+    }
+
+    /**
+     * 获取数据Map
+     * @return
+     */
+    public Map<Integer, Object> getDataMap() {
+        return dataMap;
     }
 }
